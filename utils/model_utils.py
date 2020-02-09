@@ -6,11 +6,13 @@ def perform_prediction(image_in, model):
     """
     Performs prediction given an input image and tf.lite.Interpreter instance.
     Inputs:
-        image_in: input image
+        image_in: input image (in 0..255 intensity range)
         model: tf.lite.Interpreter instance
     Outputs:
-        output_heatmaps: tensor containing heatmaps for each body part
-        output_offsets: tensor containing offsets for each body part
+        heatmaps: tensor containing heatmaps for each body part
+        offsets: tensor containing offsets for each body part
+        displacement_fwd: tensor containing forward displacements
+        displacement_bwd: tensor containing backward displacements
         image: copy of the image (resized) that was fed to the model
 
     """
@@ -32,12 +34,14 @@ def perform_prediction(image_in, model):
     # predict
     model.invoke()
     # retrieve outputs
-    output_heatmaps = model.get_tensor(output_details[0]['index'])
+    heatmaps = model.get_tensor(output_details[0]['index'])
     # res x res x 34 values, first 17 are x offsets, remaining 17 are y offsets (same scale as image)
-    output_offsets = model.get_tensor(output_details[1]['index'])
+    offsets = model.get_tensor(output_details[1]['index'])
+    displacement_fwd = model.get_tensor(output_details[2]['index'])
+    displacement_bwd = model.get_tensor(output_details[3]['index'])
 
-    # return heatmaps, offsets and the resized image
-    return output_heatmaps, output_offsets, image
+    # return heatmaps, offsets, displacements and the resized image
+    return heatmaps, offsets, displacement_fwd, displacement_bwd, image
 
 def decode_predictions(heatmaps, offsets, output_stride=32):
     """
@@ -72,7 +76,7 @@ def decode_predictions(heatmaps, offsets, output_stride=32):
         # use the offsets to compute the keypoints
         kp_y = int(hmap_pos[0] * output_stride + offset_y)
         kp_x = int(hmap_pos[1] * output_stride + offset_x)
-        conf_score = heatmaps[hmap_pos[0]][hmap_pos[1]][part_index]
+        conf_score = scores[hmap_pos[0]][hmap_pos[1]][part_index]
         
         keypoints.append({"x": kp_x, "y": kp_y, "part_index": part_index, "confidence": conf_score})
     return keypoints
